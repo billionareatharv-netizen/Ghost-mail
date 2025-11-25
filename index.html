@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GhostMail — Temporary Email</title>
+  <meta name="description" content="GhostMail - temporary inbox (built with mail.tm API)" />
+  <link rel="icon" href="data:," />
+
+  <style>
+    /* --- Modern Premium UI: glassmorphism + animations --- */
+    :root{
+      --bg1: #0f172a;
+      --bg2: #071033;
+      --accent: #7c5cff;
+      --glass: rgba(255,255,255,0.06);
+      --glass-2: rgba(255,255,255,0.03);
+      --muted: rgba(255,255,255,0.7);
+      --glass-border: rgba(255,255,255,0.08);
+    }
+    *{box-sizing:border-box;font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    html,body{height:100%;margin:0;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:#fff;-webkit-font-smoothing:antialiased;}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px;}
+    .card{
+      width:100%;
+      max-width:1100px;
+      display:grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap:18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:18px;
+      padding:18px;
+      border:1px solid var(--glass-border);
+      box-shadow: 0 8px 30px rgba(2,6,23,0.6);
+      backdrop-filter: blur(10px) saturate(120%);
+    }
+
+    /* left: controls + inbox list */
+    .panel-left{
+      padding:14px;
+      border-radius:12px;
+      background: linear-gradient(180deg,var(--glass),transparent);
+      display:flex;flex-direction:column;gap:12px;
+      min-height:420px;
+    }
+    .brand{
+      display:flex;align-items:center;gap:12px;
+    }
+    .logo{
+      width:46px;height:46px;border-radius:10px;
+      background:linear-gradient(135deg,var(--accent),#4bc0ff);
+      display:flex;align-items:center;justify-content:center;font-weight:700;box-shadow:0 6px 18px rgba(124,92,255,0.18);
+    }
+    h1{font-size:18px;margin:0}
+    .sub {font-size:13px;color:var(--muted);margin-top:2px}
+
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{
+      padding:10px 12px;border-radius:10px;border:1px solid var(--glass-border);
+      background:transparent;color:#fff;font-weight:600;cursor:pointer;
+      transition:transform .12s ease, box-shadow .12s ease;
+    }
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{background:linear-gradient(90deg,var(--accent),#4bc0ff);color:#06060a;box-shadow:0 8px 30px rgba(124,92,255,0.18)}
+    .small{font-size:13px;padding:8px 10px}
+
+    .email-box{
+      margin-top:6px;padding:10px;border-radius:10px;border:1px dashed rgba(255,255,255,0.04);
+      display:flex;align-items:center;justify-content:space-between;gap:8px;background:linear-gradient(180deg,var(--glass-2),transparent);
+    }
+    .email-text{font-weight:700;word-break:break-all}
+    .copy{opacity:.9;font-size:13px;padding:6px;border-radius:8px}
+
+    .inbox{
+      margin-top:8px;overflow:auto;padding-right:6px;
+    }
+    .msg{
+      padding:10px;border-radius:10px;margin-bottom:8px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+      border:1px solid rgba(255,255,255,0.02);cursor:pointer;display:flex;flex-direction:column;gap:6px;
+    }
+    .msg:hover{transform:translateY(-3px);transition:all .15s}
+    .msg .from{font-weight:700}
+    .msg .subj{font-size:13px;color:var(--muted)}
+
+    /* right: content viewer */
+    .panel-right{
+      padding:18px;border-radius:12px;background:linear-gradient(180deg,var(--glass),transparent);
+      display:flex;flex-direction:column;gap:12px;
+      min-height:420px;
+    }
+    .viewer-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .meta{font-size:13px;color:var(--muted)}
+    .message-body{
+      margin-top:8px;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);
+      background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);
+      overflow:auto;min-height:220px;
+    }
+
+    .muted{color:var(--muted);font-size:13px}
+    .hint{font-size:13px;color:var(--muted);margin-top:6px}
+
+    /* responsive */
+    @media (max-width:900px){
+      .card{grid-template-columns:1fr; padding:12px}
+      .panel-left,.panel-right{min-height:unset}
+    }
+
+    /* tiny helpers */
+    .row{display:flex;gap:8px;align-items:center}
+    .spinner{width:18px;height:18px;border-radius:50%;border:3px solid rgba(255,255,255,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" role="application" aria-label="GhostMail temp inbox">
+      <div class="panel-left">
+        <div>
+          <div class="brand">
+            <div class="logo">G</div>
+            <div>
+              <h1>GhostMail</h1>
+              <div class="sub">Temporary email — anonymous, disposable. Auto-refresh every 10s.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls" id="controls">
+          <button class="btn primary" id="createBtn">Create Address</button>
+          <button class="btn small" id="regenBtn">Generate New</button>
+          <button class="btn small" id="copyBtn">Copy Address</button>
+          <button class="btn small" id="manualRefreshBtn">Refresh Now</button>
+          <div style="flex:1"></div>
+          <div id="status" class="muted">Idle</div>
+        </div>
+
+        <div class="email-box" id="emailBox" aria-live="polite">
+          <div class="email-text" id="emailText">—</div>
+          <div class="row">
+            <div id="autoSpinner" style="display:none" class="spinner" title="Refreshing"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:8px">
+          <div class="hint">Inbox</div>
+          <div class="inbox" id="inboxList" role="list" aria-label="Inbox messages">
+            <!-- messages appended here -->
+          </div>
+        </div>
+
+      </div>
+
+      <div class="panel-right">
+        <div class="viewer-top">
+          <div>
+            <div class="muted" id="selectedFrom">No message selected</div>
+            <div id="selectedSubject" style="font-weight:700">—</div>
+          </div>
+          <div class="row">
+            <button class="btn small" id="openOriginalBtn" style="display:none">Open Raw</button>
+            <button class="btn small" id="deleteMsgBtn" style="display:none">Delete</button>
+          </div>
+        </div>
+
+        <div class="message-body" id="messageBody">
+          <div class="muted">No message loaded. Create an address and wait for mail — or click "Refresh Now".</div>
+        </div>
+
+        <div style="margin-top:auto" class="muted">Built with ❤️ using mail.tm API • GhostMail</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  GhostMail — Single-file temp-mail front-end
+  Uses mail.tm API (https://api.mail.tm)
+  Features:
+   - create account + token (saved in localStorage)
+   - generate random local-part and choose domain from mail.tm
+   - fetch messages, auto-refresh every 10s, manual refresh
+   - preview message, copy address
+*/
+
+const API_BASE = 'https://api.mail.tm';
+const AUTO_REFRESH_INTERVAL = 10000; // 10 seconds
+let token = localStorage.getItem('ghostmail_token') || null;
+let accountId = localStorage.getItem('ghostmail_accountId') || null;
+let currentAddress = localStorage.getItem('ghostmail_address') || null;
+let refreshTimer = null;
+let messagesCache = [];
+
+const el = id => document.getElementById(id);
+const status = (t) => el('status').textContent = t;
+
+// small helper to do fetch with JSON
+async function apiFetch(path, opts = {}) {
+  const headers = opts.headers || {};
+  headers['Accept'] = 'application/ld+json';
+  headers['Content-Type'] = 'application/json';
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  opts.headers = headers;
+  const res = await fetch(API_BASE + path, opts);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`HTTP ${res.status}: ${txt}`);
+  }
+  return res.json();
+}
+
+function showSpinner(show){
+  el('autoSpinner').style.display = show ? 'inline-block' : 'none';
+}
+
+/* pick a random local-part */
+function randLocalPart(){
+  const prefix = 'ghost';
+  const r = Math.random().toString(36).substring(2,9);
+  return `${prefix}${r}`;
+}
+
+/* get available domains from mail.tm */
+async function getDomains(){
+  try{
+    const data = await apiFetch('/domains');
+    if (data && data['hydra:member']) return data['hydra:member'];
+    return [];
+  }catch(e){
+    console.warn('Domains error', e);
+    return [];
+  }
+}
+
+/* build a random address using domain list */
+async function buildRandomAddress(){
+  const domains = await getDomains();
+  let domain = domains.length ? domains[0].domain : 'mail.tm';
+  // prefer domains[0] but try to pick random safe
+  if (domains.length > 1){
+    const idx = Math.floor(Math.random()*domains.length);
+    domain = domains[idx].domain;
+  }
+  const local = randLocalPart();
+  return `${local}@${domain}`;
+}
+
+/* create account on mail.tm */
+async function createAccount(address, password){
+  status('Creating account...');
+  const body = JSON.stringify({address, password});
+  const res = await fetch(API_BASE + '/accounts', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','Accept':'application/ld+json'},
+    body
+  });
+  if (res.status === 201 || res.status === 200) {
+    const data = await res.json();
+    accountId = data.id;
+    localStorage.setItem('ghostmail_accountId', accountId);
+    status('Account created. Getting token...');
+    // get token
+    const tokenData = await fetch(API_BASE + '/token', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({address, password})
+    });
+    if (!tokenData.ok) throw new Error('Token fetch failed');
+    const tokJ = await tokenData.json();
+    token = tokJ.token;
+    localStorage.setItem('ghostmail_token', token);
+    localStorage.setItem('ghostmail_address', address);
+    currentAddress = address;
+    status('Ready — address saved.');
+    return true;
+  } else {
+    const txt = await res.text();
+    throw new Error('Account error: ' + txt);
+  }
+}
+
+/* fetch messages */
+async function fetchMessages(){
+  if (!currentAddress || !token) return;
+  try{
+    showSpinner(true);
+    status('Fetching messages...');
+    const data = await apiFetch('/messages');
+    // hydra:member is array
+    const msgs = data['hydra:member'] || [];
+    messagesCache = msgs;
+    renderInbox(msgs);
+    status('Updated at ' + new Date().toLocaleTimeString());
+  }catch(e){
+    console.error(e);
+    status('Error fetching messages');
+  }finally{
+    showSpinner(false);
+  }
+}
+
+/* render inbox list */
+function renderInbox(msgs){
+  const container = el('inboxList');
+  container.innerHTML = '';
+  if (!msgs.length){
+    container.innerHTML = '<div class="muted">No messages yet.</div>';
+    el('selectedFrom').textContent = 'No message selected';
+    el('selectedSubject').textContent = '—';
+    el('messageBody').innerHTML = '<div class="muted">No message loaded. Wait or refresh.</div>';
+    return;
+  }
+  msgs.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'msg';
+    div.tabIndex = 0;
+    div.innerHTML = `<div class="from">${escapeHtml(m.from?.address || 'Unknown')}</div>
+                     <div class="subj">${escapeHtml(m.subject || '(no subject)')}</div>
+                     <div class="muted" style="font-size:12px">${new Date(m.createdAt).toLocaleString()}</div>`;
+    div.onclick = () => loadMessage(m.id);
+    div.onkeydown = (e)=>{ if(e.key==='Enter') loadMessage(m.id) };
+    container.appendChild(div);
+  });
+}
+
+/* load single message full content */
+async function loadMessage(id){
+  try{
+    status('Loading message...');
+    const m = await apiFetch(`/messages/${id}`);
+    el('selectedFrom').textContent = (m.from?.name || m.from?.address || 'Unknown');
+    el('selectedSubject').textContent = m.subject || '(no subject)';
+    // show HTML if available else text
+    if (m.html){
+      el('messageBody').innerHTML = m.html;
+    } else {
+      el('messageBody').textContent = m.text || '(empty message)';
+    }
+    // show raw open button
+    const openBtn = el('openOriginalBtn');
+    openBtn.style.display = 'inline-block';
+    openBtn.onclick = ()=> window.open(m.id ? `${API_BASE}/messages/${id}` : '#','_blank');
+    const delBtn = el('deleteMsgBtn');
+    delBtn.style.display = 'inline-block';
+    delBtn.onclick = async ()=>{
+      try{
+        await fetch(API_BASE + `/messages/${id}`, {method:'DELETE', headers:{'Authorization':'Bearer '+token}});
+        status('Deleted message');
+        fetchMessages();
+      }catch(err){ console.warn(err); status('Delete failed'); }
+    };
+  }catch(e){
+    console.error(e);
+    status('Failed to load message');
+  }
+}
+
+/* utility: escape HTML for safe text rendering */
+function escapeHtml(s = ''){
+  return s.replace?.(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') ?? s;
+}
+
+/* UI: copy address */
+async function copyAddress(){
+  if (!currentAddress) return alert('No address yet. Create one first.');
+  try{
+    await navigator.clipboard.writeText(currentAddress);
+    status('Address copied to clipboard');
+  }catch(e){
+    status('Copy failed — please long-press to copy');
+  }
+}
+
+/* generate new address (create a fresh account) */
+async function generateNewAddress(){
+  try{
+    status('Generating address...');
+    const addr = await buildRandomAddress();
+    const pw = Math.random().toString(36).slice(2,12) + 'A1'; // random password (store nowhere)
+    // try create account; if account exists, try again
+    try{
+      await createAccount(addr, pw);
+    }catch(e){
+      // if account conflict, try again with different local part
+      console.warn('Account creation error, retry', e);
+      const newAddr = await buildRandomAddress();
+      await createAccount(newAddr, pw);
+    }
+    updateAddressUI();
+    fetchMessages();
+    setupAutoRefresh();
+  }catch(e){
+    console.error(e);
+    status('Could not create address: ' + (e.message||e));
+  }
+}
+
+function updateAddressUI(){
+  el('emailText').textContent = currentAddress || '—';
+}
+
+/* setup auto refresh */
+function setupAutoRefresh(){
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(()=> {
+    // only fetch if token exists
+    if (token) fetchMessages();
+  }, AUTO_REFRESH_INTERVAL);
+}
+
+/* try to resume existing session */
+async function tryResume(){
+  if (token && currentAddress){
+    updateAddressUI();
+    status('Resuming saved session');
+    try{
+      // quick test fetch
+      await fetchMessages();
+      setupAutoRefresh();
+    }catch(e){
+      console.warn('Resume failed', e);
+      status('Session expired or invalid. Create a new address.');
+    }
+  }
+}
+
+/* attach listeners */
+el('createBtn').addEventListener('click', async ()=>{
+  // if already have address, just confirm regenerate?
+  if (currentAddress && confirm('An address already exists. Generate a new one?')) {
+    await generateNewAddress();
+  } else if (!currentAddress) {
+    await generateNewAddress();
+  }
+});
+
+el('regenBtn').addEventListener('click', async ()=> {
+  if (!confirm('Generate and create a NEW disposable address? Previous will still exist until expiry.')) return;
+  await generateNewAddress();
+});
+
+el('copyBtn').addEventListener('click', copyAddress);
+el('manualRefreshBtn').addEventListener('click', async ()=>{
+  showSpinner(true);
+  await fetchMessages();
+  showSpinner(false);
+});
+
+/* on load */
+(async ()=>{
+  // restore saved address variable
+  currentAddress = localStorage.getItem('ghostmail_address') || null;
+  token = localStorage.getItem('ghostmail_token') || null;
+  accountId = localStorage.getItem('ghostmail_accountId') || null;
+  updateAddressUI();
+  await tryResume();
+})();
+
+</script>
+</body>
+</html>
